@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+.vscode/
+outputs/
+runs/
+*.pt
+*.pth
+*.log
+*.png

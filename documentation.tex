@@ -1,0 +1,251 @@
+
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{enumitem}
+
+\title{Initial Project Documentation\\
+Deep Learning Models Comparison}
+\author{}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Project Overview}
+
+The goal of this project is to experimentally evaluate and compare different deep learning approaches for image classification. The study focuses on:
+
+\begin{itemize}
+    \item convolutional neural networks (CNN),
+    \item few-shot learning methods,
+    \item modern pretrained architectures,
+    \item ensemble techniques.
+\end{itemize}
+
+The project investigates how architectural choices, training hyperparameters, regularization strategies, and data augmentation techniques influence model performance.
+
+All experiments will be conducted using PyTorch with training performed locally on GPU hardware. Experiment tracking and visualization will be handled using TensorBoard.
+
+\section{Technology Stack}
+
+The project will use the following tools:
+
+\begin{itemize}
+    \item framework: PyTorch;
+    \item hardware: local GPU;
+    \item experiment tracking: TensorBoard;
+    \item programming language: Python;
+    \item version control: Git.
+\end{itemize}
+
+PyTorch was selected due to its flexibility and strong support for experimental workflows.
+
+\section{Data Augmentation}
+
+To improve generalization and analyze augmentation influence, augmented datasets will be generated and stored prior to training.
+
+\subsection{Standard Augmentation Techniques}
+
+The following standard transformations will be applied:
+
+\begin{itemize}
+    \item horizontal flip,
+    \item rotation by $45^\circ$ (random direction),
+    \item Gaussian blur.
+\end{itemize}
+
+\subsection{Advanced Augmentation Techniques}
+
+Four advanced augmentation methods will be used:
+
+\begin{itemize}
+    \item Cutout - randomly masking square regions of the image,
+    \item color jittering - transforming saturation, brightness and hue,
+    \item Autoaugment - python library for automatic and optimal data augmentation,
+    \item creating noise and artifacts using image compression.
+\end{itemize}
+
+
+\section{Experimental Methodology}
+
+The experimental pipeline consists of the following stages:
+
+\begin{enumerate}
+    \item Training and analysis of multiple CNN configurations.
+    \item Selection of the best-performing CNN (CNN representative).
+    \item Comparison with:
+    \begin{itemize}
+        \item few-shot learning model,
+        \item EfficientNet architecture.
+    \end{itemize}
+    \item Ensemble learning using soft voting.
+\end{enumerate}
+
+\section{CNN Implementation and Experiments}
+
+The CNN architecture will follow the official PyTorch tutorial:
+
+\begin{center}
+\url{https://docs.pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html}
+\end{center}
+
+This architecture serves as a controlled baseline for systematic hyperparameter analysis.
+
+\subsection{Training Hyperparameters}
+
+The following training-related hyperparameters will be investigated:
+
+\begin{itemize}
+    \item Optimizer:
+    \begin{itemize}
+        \item SGD
+        \item Adam
+    \end{itemize}
+    \item Momentum (SGD optimizer, 2-3 different values)
+\end{itemize}
+
+\subsection{Regularization Hyperparameters}
+
+The following regularization parameters will be analyzed:
+
+\begin{itemize}
+    \item Dropout:
+    \begin{itemize}
+        \item disabled
+        \item enabled
+    \end{itemize}
+    \item Cross-Entropy label smoothing:
+    \begin{itemize}
+        \item zero smoothing
+        \item non-zero smoothing
+    \end{itemize}
+\end{itemize}
+
+\subsection{Experimental Grid}
+
+Each CNN variant will be evaluated across combinations of:
+
+\begin{itemize}
+    \item augmentation strategy (including selected combinations of more than one),
+    \item optimizer type,
+    \item momentum value,
+    \item label smoothing,
+    \item dropout configuration.
+\end{itemize}
+
+The best-performing configuration will be selected as the \textbf{CNN representative model}.
+
+\section{Few-Shot Learning}
+
+To address learning under limited data conditions, a few-shot learning method will be implemented.
+
+\subsection{Method Used}
+
+Prototypical Networks implementation:
+
+\begin{center}
+\url{https://github.com/orobix/Prototypical-Networks-for-Few-shot-Learning-PyTorch}
+\end{center}
+
+Prototypical networks learn a metric space where classification is performed using distances to class prototypes.
+
+\section{EfficientNet Comparison}
+
+A pretrained EfficientNet model will be used as a modern architecture baseline.
+
+EfficientNet provides:
+
+\begin{itemize}
+    \item compound scaling of depth, width, and resolution,
+    \item strong performance with relatively low parameter count,
+    \item transfer learning capabilities.
+\end{itemize}
+
+The network will be fine-tuned on the project dataset and compared with other models.
+
+\section{Reduced Training Dataset Experiments}
+
+To analyze robustness to limited data availability:
+
+\begin{enumerate}
+    \item A reduced subset of the training dataset will be created.
+    \item Selected models will be trained using:
+    \begin{itemize}
+        \item full dataset,
+        \item reduced dataset.
+    \end{itemize}
+    \item Performance degradation will be analyzed.
+\end{enumerate}
+
+\section{Ensemble Method --- Soft Voting}
+
+An ensemble model will be implemented using soft voting.
+
+Each model outputs class probability distributions:
+
+\begin{itemize}
+    \item CNN representative,
+    \item few-shot model,
+    \item EfficientNet.
+\end{itemize}
+
+Final prediction is computed as:
+
+\begin{equation}
+P_{\text{final}} = \frac{1}{3}\sum_{i=1}^{3} P_i
+\end{equation}
+
+where $P_i$ denotes predicted probabilities from model $i$.
+
+\section{Evaluation Metrics}
+
+Models will be evaluated using:
+
+\begin{itemize}
+    \item classification accuracy
+    \item validation loss
+    \item precision
+    \item recall
+\end{itemize}
+
+Training dynamics will be monitored using TensorBoard.
+
+\section{Experimental Procedure}
+
+Each experiment follows:
+
+\begin{enumerate}
+    \item Dataset preparation and augmentation
+    \item Model initialization
+    \item Training under fixed epoch budget
+    \item Validation evaluation
+    \item Logging results in TensorBoard
+    \item Saving best checkpoints
+    \item Comparative analysis
+\end{enumerate}
+
+To ensure fairness:
+
+\begin{itemize}
+    \item identical train/validation splits size will be used,
+    \item random seeds will be fixed where possible.
+\end{itemize}
+
+\section{Reproducibility}
+
+Reproducibility will be ensured by:
+
+\begin{itemize}
+    \item fixing random seeds,
+    \item storing augmented datasets,
+    \item logging hyperparameters,
+    \item saving trained checkpoints,
+    \item version-controlling the source code.
+\end{itemize}
+
+\end{document}
