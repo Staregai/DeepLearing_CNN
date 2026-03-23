@@ -42,13 +42,7 @@ def main() -> None:
     eff_out = args.out_root / "efficientnet"
     fs_out = args.out_root / "fewshot"
 
-    _run(
-        _append_subset_args(
-            [py, "scripts/run_cnn_grid.py", "--data-dir", str(args.data_dir), "--out-dir", str(cnn_out)],
-            args.train_subset_ratio,
-            args.train_subset_size,
-        )
-    )
+    
     _run(
         _append_subset_args(
             [py, "scripts/run_efficientnet.py", "--data-dir", str(args.data_dir), "--out-dir", str(eff_out)],
@@ -66,6 +60,14 @@ def main() -> None:
     _run(
         _append_subset_args(
             [py, "scripts/run_reduced_data.py", "--data-dir", str(args.data_dir), "--out-dir", str(args.out_root / "reduced_data")],
+            args.train_subset_ratio,
+            args.train_subset_size,
+        )
+    )
+    
+    _run(
+        _append_subset_args(
+            [py, "scripts/run_cnn_grid.py", "--data-dir", str(args.data_dir), "--out-dir", str(cnn_out)],
             args.train_subset_ratio,
             args.train_subset_size,
         )

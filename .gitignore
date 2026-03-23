@@ -4,8 +4,10 @@ __pycache__/
 .env
 .vscode/
 outputs/
+outputs_20/
 runs/
 *.pt
 *.pth
 *.log
 *.png
+*.json

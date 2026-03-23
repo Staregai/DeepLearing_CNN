@@ -67,6 +67,7 @@ scripts/
 	run_cnn_grid.py
 	run_efficientnet.py
 	run_fewshot.py
+	run_cnn.py
 	run_reduced_data.py
 	run_ensemble.py
 	run_all.py
@@ -92,6 +93,39 @@ Investigated dimensions include:
 - training hyperparameters: optimizer (SGD/Adam), momentum,
 - regularization hyperparameters: dropout, label smoothing,
 - augmentation profiles: baseline + advanced methods.
+
+### Single CNN with Early Stopping
+
+Train a single CNN configuration with early stopping (stops training when validation loss improvement falls below threshold):
+
+```bash
+python scripts/run_cnn.py --out-dir outputs/cnn_single
+```
+
+Customize hyperparameters and early stopping:
+
+```bash
+python scripts/run_cnn.py \
+  --out-dir outputs/cnn_single \
+  --epochs 200 \
+  --learning-rate 1e-3 \
+  --optimizer adam \
+  --dropout 0.3 \
+  --label-smoothing 0.1 \
+  --aug-profile combo \
+  --patience 10 \
+  --min-delta 1e-4
+```
+
+Early stopping options:
+- `--patience 10` – Stop if no improvement for 10 epochs
+- `--min-delta 1e-4` – Minimum loss decrease to count as improvement
+- `--aug-profile {baseline|color_jitter|autoaugment|cutout|compression|combo}` – Augmentation strategy
+
+Also supports subset training:
+```bash
+python scripts/run_cnn.py --train-subset-ratio 0.3 --patience 15
+```
 
 ### EfficientNet baseline
 

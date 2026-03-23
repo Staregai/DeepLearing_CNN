@@ -13,13 +13,14 @@ from src.utils.reproducibility import set_seed
 
 
 def main() -> None:
+    cfg_defaults = TrainConfig()
     parser = argparse.ArgumentParser(description="Compare full vs reduced data for CNN")
     parser.add_argument("--data-dir", type=Path, default=Path("src/dataset"))
     parser.add_argument("--out-dir", type=Path, default=Path("outputs/reduced_data"))
     parser.add_argument("--ratio", type=float, default=0.3)
-    parser.add_argument("--epochs", type=int, default=20)
-    parser.add_argument("--batch-size", type=int, default=128)
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--epochs", type=int, default=cfg_defaults.epochs)
+    parser.add_argument("--batch-size", type=int, default=cfg_defaults.batch_size)
+    parser.add_argument("--seed", type=int, default=cfg_defaults.seed)
     subset_group = parser.add_mutually_exclusive_group()
     subset_group.add_argument("--train-subset-ratio", type=float, default=None)
     subset_group.add_argument("--train-subset-size", type=int, default=None)

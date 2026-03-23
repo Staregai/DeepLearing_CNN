@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 from dataclasses import asdict
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from src.config import TrainConfig
+from src.training.early_stopping import EarlyStopping
 from src.training.metrics import macro_precision_recall
 from src.utils.io import ensure_dir, save_json
 
@@ -32,13 +34,17 @@ def run_epoch(model: nn.Module, loader: DataLoader, criterion: nn.Module, optimi
     desc = "Training" if train else "Validating"
     for images, targets in tqdm(loader, desc=desc, leave=False):
         images, targets = images.to(device), targets.to(device)
-        logits = model(images)
-        loss = criterion(logits, targets)
-
+        
         if train:
+            logits = model(images)
+            loss = criterion(logits, targets)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+        else:
+            with torch.no_grad():
+                logits = model(images)
+                loss = criterion(logits, targets)
 
         total_loss += loss.item() * images.size(0)
         all_preds.append(logits.argmax(dim=1).detach().cpu())
@@ -66,12 +72,14 @@ def train_supervised(
     cfg: TrainConfig,
     output_dir: Path,
     device: torch.device,
+    patience: int = 5,
 ) -> dict:
     ensure_dir(output_dir)
     writer = SummaryWriter(log_dir=str(output_dir / "tb"))
 
     criterion = nn.CrossEntropyLoss(label_smoothing=cfg.label_smoothing)
     optimizer = _build_optimizer(model, cfg)
+    early_stopping = EarlyStopping(patience=patience, checkpoint_path=output_dir / "best.pt")
 
     model.to(device)
     best_val_acc = -1.0
@@ -94,17 +102,27 @@ def train_supervised(
             best_val_acc = val_metrics["accuracy"]
             torch.save(model.state_dict(), best_ckpt)
 
+        # Early stopping
+        if early_stopping(val_metrics["loss"]):
+            tqdm.write(f"Early stopping at epoch {epoch + 1}")
+            break
+
     model.load_state_dict(torch.load(best_ckpt, map_location=device))
     test_metrics = run_epoch(model, test_loader, criterion, optimizer=None, device=device, train=False)
 
     writer.close()
 
-    result = {
-        "config": asdict(cfg),
+    # Cleanup to prevent memory leaks
+    model.cpu()
+    del criterion, optimizer, writer
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+    return {
         "best_val_accuracy": best_val_acc,
         "test_metrics": test_metrics,
-        "checkpoint": str(best_ckpt),
+        "history": history,
     }
-    save_json(result, output_dir / "result.json")
-    save_json(history, output_dir / "history.json")
-    return result
+
+

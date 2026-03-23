@@ -1,0 +1,142 @@
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+import torch
+
+from src.config import TrainConfig
+from src.data.cinic10 import load_cinic10_datasets, make_dataloaders, subset_training_dataset
+from src.models.cnn_baseline import BaselineCNN
+from src.training.early_stopping import EarlyStopping
+from src.training.supervised import run_epoch
+from src.utils.device import get_device
+from src.utils.io import ensure_dir, save_json
+from src.utils.reproducibility import set_seed
+from torch import nn
+from torch.utils.tensorboard import SummaryWriter
+
+
+def main() -> None:
+    cfg_defaults = TrainConfig()
+    parser = argparse.ArgumentParser(description="Train single CNN with early stopping")
+    parser.add_argument("--data-dir", type=Path, default=Path("src/dataset"))
+    parser.add_argument("--out-dir", type=Path, default=Path("outputs/cnn_single"))
+    parser.add_argument("--epochs", type=int, default=cfg_defaults.epochs)
+    parser.add_argument("--batch-size", type=int, default=cfg_defaults.batch_size)
+    parser.add_argument("--learning-rate", type=float, default=cfg_defaults.learning_rate)
+    parser.add_argument("--optimizer", type=str, default=cfg_defaults.optimizer, choices=["adam", "sgd"])
+    parser.add_argument("--momentum", type=float, default=cfg_defaults.momentum)
+    parser.add_argument("--label-smoothing", type=float, default=cfg_defaults.label_smoothing)
+    parser.add_argument("--dropout", type=float, default=cfg_defaults.dropout)
+    parser.add_argument("--seed", type=int, default=cfg_defaults.seed)
+    parser.add_argument("--patience", type=int, default=10, help="Early stopping patience")
+    parser.add_argument("--min-delta", type=float, default=1e-4, help="Minimum loss delta")
+    parser.add_argument("--aug-profile", type=str, default="combo")
+    subset_group = parser.add_mutually_exclusive_group()
+    subset_group.add_argument("--train-subset-ratio", type=float, default=None)
+    subset_group.add_argument("--train-subset-size", type=int, default=None)
+    args = parser.parse_args()
+
+    set_seed(args.seed)
+    device = get_device()
+
+    train_ds, val_ds, test_ds = load_cinic10_datasets(args.data_dir, train_aug_profile=args.aug_profile)
+    train_ds = subset_training_dataset(
+        train_ds,
+        seed=args.seed,
+        subset_count=args.train_subset_size,
+        subset_ratio=args.train_subset_ratio,
+    )
+    train_loader, val_loader, test_loader = make_dataloaders(train_ds, val_ds, test_ds, args.batch_size, num_workers=4)
+
+    cfg = TrainConfig(
+        batch_size=args.batch_size,
+        epochs=args.epochs,
+        learning_rate=args.learning_rate,
+        optimizer=args.optimizer,
+        momentum=args.momentum,
+        label_smoothing=args.label_smoothing,
+        dropout=args.dropout,
+        seed=args.seed,
+    )
+
+    ensure_dir(args.out_dir)
+    writer = SummaryWriter(log_dir=str(args.out_dir / "tb"))
+
+    model = BaselineCNN(num_classes=10, dropout=cfg.dropout)
+    model.to(device)
+
+    from torch.optim import Adam, SGD
+
+    if cfg.optimizer.lower() == "sgd":
+        optimizer = SGD(model.parameters(), lr=cfg.learning_rate, momentum=cfg.momentum, weight_decay=cfg.weight_decay)
+    else:
+        optimizer = Adam(model.parameters(), lr=cfg.learning_rate, weight_decay=cfg.weight_decay)
+
+    criterion = nn.CrossEntropyLoss(label_smoothing=cfg.label_smoothing)
+    early_stop = EarlyStopping(patience=args.patience, min_delta=args.min_delta, checkpoint_path=args.out_dir / "best.pt")
+
+    best_val_acc = -1.0
+    best_ckpt = args.out_dir / "best.pt"
+    history = {"train": [], "val": [], "early_stopped_epoch": None}
+
+    for epoch in range(cfg.epochs):
+        train_metrics = run_epoch(model, train_loader, criterion, optimizer, device, train=True)
+        val_metrics = run_epoch(model, val_loader, criterion, optimizer, device, train=False)
+
+        history["train"].append(train_metrics)
+        history["val"].append(val_metrics)
+
+        for k, v in train_metrics.items():
+            writer.add_scalar(f"train/{k}", v, epoch)
+        for k, v in val_metrics.items():
+            writer.add_scalar(f"val/{k}", v, epoch)
+
+        if val_metrics["accuracy"] > best_val_acc:
+            best_val_acc = val_metrics["accuracy"]
+            torch.save(model.state_dict(), best_ckpt)
+
+        stopped = early_stop(val_metrics["loss"])
+        improvement = early_stop.get_improvement(val_metrics["loss"])
+        print(
+            f"Epoch {epoch+1}/{cfg.epochs} | Val Loss: {val_metrics['loss']:.4f} | "
+            f"Improvement: {improvement:.6f} | Patience: {early_stop.counter}/{args.patience}"
+        )
+
+        if stopped:
+            print(f"Early stopping at epoch {epoch+1}")
+            history["early_stopped_epoch"] = epoch
+            break
+
+    model.load_state_dict(torch.load(best_ckpt, map_location=device))
+    test_metrics = run_epoch(model, test_loader, criterion, optimizer=None, device=device, train=False)
+
+    writer.close()
+
+    result = {
+        "config": {
+            "batch_size": cfg.batch_size,
+            "epochs": cfg.epochs,
+            "learning_rate": cfg.learning_rate,
+            "optimizer": cfg.optimizer,
+            "momentum": cfg.momentum,
+            "label_smoothing": cfg.label_smoothing,
+            "dropout": cfg.dropout,
+            "seed": cfg.seed,
+            "aug_profile": args.aug_profile,
+            "early_stopping_patience": args.patience,
+            "early_stopping_min_delta": args.min_delta,
+        },
+        "best_val_accuracy": best_val_acc,
+        "test_metrics": test_metrics,
+        "checkpoint": str(best_ckpt),
+        "early_stopped": history["early_stopped_epoch"] is not None,
+        "early_stopped_epoch": history["early_stopped_epoch"],
+    }
+    save_json(result, args.out_dir / "result.json")
+    save_json(history, args.out_dir / "history.json")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import gc
 from itertools import product
 from pathlib import Path
+
+import torch
 
 from src.config import TrainConfig
 from src.data.cinic10 import load_cinic10_datasets, make_dataloaders, subset_training_dataset
@@ -14,12 +17,13 @@ from src.utils.reproducibility import set_seed
 
 
 def main() -> None:
+    cfg_defaults = TrainConfig()
     parser = argparse.ArgumentParser(description="Run CNN hyperparameter grid on CINIC-10")
     parser.add_argument("--data-dir", type=Path, default=Path("src/dataset"))
     parser.add_argument("--out-dir", type=Path, default=Path("outputs/cnn_grid"))
-    parser.add_argument("--epochs", type=int, default=20)
-    parser.add_argument("--batch-size", type=int, default=128)
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--epochs", type=int, default=cfg_defaults.epochs)
+    parser.add_argument("--batch-size", type=int, default=cfg_defaults.batch_size)
+    parser.add_argument("--seed", type=int, default=cfg_defaults.seed)
     subset_group = parser.add_mutually_exclusive_group()
     subset_group.add_argument("--train-subset-ratio", type=float, default=None)
     subset_group.add_argument("--train-subset-size", type=int, default=None)
@@ -30,9 +34,9 @@ def main() -> None:
 
     aug_profiles = ["baseline", "color_jitter", "autoaugment", "cutout", "compression", "combo"]
     optimizers = ["sgd", "adam"]
-    momentums = [0.7,0.8, 0.9]
-    label_smoothing_vals = [0.0, 0.1, 0.2]
-    dropouts = [0.0, 0.15, 0.3]
+    momentums = [0.7, 0.8]
+    label_smoothing_vals = [0.0, 0.2]
+    dropouts = [0.0, 0.3]
 
     runs = []
 
@@ -69,6 +73,12 @@ def main() -> None:
         result = train_supervised(model, train_loader, val_loader, test_loader, cfg, out, device)
         result["run_name"] = run_name
         runs.append(result)
+
+        # Cleanup to prevent memory leaks
+        del model, train_loader, val_loader, test_loader, train_ds, val_ds, test_ds
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     best = max(runs, key=lambda x: x["best_val_accuracy"])
     summary = {"best": best, "all_runs": runs}
