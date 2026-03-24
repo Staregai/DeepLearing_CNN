@@ -86,6 +86,7 @@ def train_supervised(
 ) -> dict:
     ensure_dir(output_dir)
     writer = SummaryWriter(log_dir=str(output_dir / "tb"))
+    print(f"Training device: {'GPU' if device.type == 'cuda' else 'CPU'} ({device})")
 
     criterion = nn.CrossEntropyLoss(label_smoothing=cfg.label_smoothing)
     optimizer = _build_optimizer(model, cfg)

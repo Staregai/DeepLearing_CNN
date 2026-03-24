@@ -42,6 +42,7 @@ def main() -> None:
 
     set_seed(args.seed)
     device = get_device()
+    print(f"Training device: {'GPU' if device.type == 'cuda' else 'CPU'} ({device})")
 
     train_ds, val_ds, test_ds = load_cinic10_datasets(args.data_dir, train_aug_profile=args.aug_profile)
     train_ds = subset_training_dataset(
