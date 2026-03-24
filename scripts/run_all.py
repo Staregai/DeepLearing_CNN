@@ -27,10 +27,17 @@ def _append_subset_args(cmd: list[str], train_subset_ratio: float | None, train_
     return cmd
 
 
+def _append_resume_arg(cmd: list[str], resume: bool) -> list[str]:
+    if resume:
+        cmd.append("--resume")
+    return cmd
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run full project pipeline")
     parser.add_argument("--data-dir", type=Path, default=Path("src/dataset"))
     parser.add_argument("--out-root", type=Path, default=Path("outputs"))
+    parser.add_argument("--resume", action="store_true", help="Resume training from saved train_state.pt files")
     subset_group = parser.add_mutually_exclusive_group()
     subset_group.add_argument("--train-subset-ratio", type=float, default=None)
     subset_group.add_argument("--train-subset-size", type=int, default=None)
@@ -44,32 +51,44 @@ def main() -> None:
 
     
     _run(
-        _append_subset_args(
-            [py, "scripts/run_efficientnet.py", "--data-dir", str(args.data_dir), "--out-dir", str(eff_out)],
-            args.train_subset_ratio,
-            args.train_subset_size,
+        _append_resume_arg(
+            _append_subset_args(
+                [py, "scripts/run_efficientnet.py", "--data-dir", str(args.data_dir), "--out-dir", str(eff_out)],
+                args.train_subset_ratio,
+                args.train_subset_size,
+            ),
+            args.resume,
         )
     )
     _run(
-        _append_subset_args(
-            [py, "scripts/run_fewshot.py", "--data-dir", str(args.data_dir), "--out-dir", str(fs_out)],
-            args.train_subset_ratio,
-            args.train_subset_size,
+        _append_resume_arg(
+            _append_subset_args(
+                [py, "scripts/run_fewshot.py", "--data-dir", str(args.data_dir), "--out-dir", str(fs_out)],
+                args.train_subset_ratio,
+                args.train_subset_size,
+            ),
+            args.resume,
         )
     )
     _run(
-        _append_subset_args(
-            [py, "scripts/run_reduced_data.py", "--data-dir", str(args.data_dir), "--out-dir", str(args.out_root / "reduced_data")],
-            args.train_subset_ratio,
-            args.train_subset_size,
+        _append_resume_arg(
+            _append_subset_args(
+                [py, "scripts/run_reduced_data.py", "--data-dir", str(args.data_dir), "--out-dir", str(args.out_root / "reduced_data")],
+                args.train_subset_ratio,
+                args.train_subset_size,
+            ),
+            args.resume,
         )
     )
     
     _run(
-        _append_subset_args(
-            [py, "scripts/run_cnn_grid.py", "--data-dir", str(args.data_dir), "--out-dir", str(cnn_out)],
-            args.train_subset_ratio,
-            args.train_subset_size,
+        _append_resume_arg(
+            _append_subset_args(
+                [py, "scripts/run_cnn_grid.py", "--data-dir", str(args.data_dir), "--out-dir", str(cnn_out)],
+                args.train_subset_ratio,
+                args.train_subset_size,
+            ),
+            args.resume,
         )
     )
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+import torch
+
 from src.config import TrainConfig
 from src.data.cinic10 import load_cinic10_datasets, make_dataloaders, make_reduced_subset, subset_training_dataset
 from src.models.cnn_baseline import BaselineCNN
@@ -21,6 +23,7 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=cfg_defaults.epochs)
     parser.add_argument("--batch-size", type=int, default=cfg_defaults.batch_size)
     parser.add_argument("--seed", type=int, default=cfg_defaults.seed)
+    parser.add_argument("--resume", action="store_true", help="Resume from full/reduced train_state.pt files")
     subset_group = parser.add_mutually_exclusive_group()
     subset_group.add_argument("--train-subset-ratio", type=float, default=None)
     subset_group.add_argument("--train-subset-size", type=int, default=None)
@@ -42,7 +45,13 @@ def main() -> None:
 
     from torch.utils.data import DataLoader
 
-    reduced_loader = DataLoader(reduced_train, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True)
+    reduced_loader = DataLoader(
+        reduced_train,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=torch.cuda.is_available(),
+    )
 
     cfg = TrainConfig(
         batch_size=args.batch_size,
@@ -57,8 +66,29 @@ def main() -> None:
     full_model = BaselineCNN(num_classes=10, dropout=cfg.dropout)
     reduced_model = BaselineCNN(num_classes=10, dropout=cfg.dropout)
 
-    full_result = train_supervised(full_model, full_train_loader, val_loader, test_loader, cfg, args.out_dir / "full", device)
-    reduced_result = train_supervised(reduced_model, reduced_loader, val_loader, test_loader, cfg, args.out_dir / "reduced", device)
+    full_resume_state = (args.out_dir / "full" / "train_state.pt") if args.resume else None
+    reduced_resume_state = (args.out_dir / "reduced" / "train_state.pt") if args.resume else None
+
+    full_result = train_supervised(
+        full_model,
+        full_train_loader,
+        val_loader,
+        test_loader,
+        cfg,
+        args.out_dir / "full",
+        device,
+        resume_state=full_resume_state,
+    )
+    reduced_result = train_supervised(
+        reduced_model,
+        reduced_loader,
+        val_loader,
+        test_loader,
+        cfg,
+        args.out_dir / "reduced",
+        device,
+        resume_state=reduced_resume_state,
+    )
 
     summary = {
         "ratio": args.ratio,

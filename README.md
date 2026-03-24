@@ -77,6 +77,7 @@ scripts/
 
 - Deterministic seed initialization is applied in each run.
 - All runs save metrics, configs, TensorBoard logs, and checkpoints.
+- Training state for resume is saved every 5 epochs as `train_state.pt`.
 
 ## 4. Run Experiments
 
@@ -183,6 +184,35 @@ Run full pipeline on subset of train data:
 ```bash
 python scripts/run_all.py --train-subset-ratio 0.3
 ```
+
+### Pause and Resume Training (every 5 epochs)
+
+Training scripts now save a resumable training state every 5 epochs. This lets you stop a run and continue later.
+
+Saved files:
+- `best.pt`: best validation model weights.
+- `epoch_<N>.pt`: periodic model snapshots (every 5 epochs).
+- `train_state.pt`: full resume state (epoch, model, optimizer, early-stopping state, history, RNG state).
+
+Resume a specific training script:
+
+```bash
+python scripts/run_efficientnet.py --out-dir outputs/efficientnet --resume
+python scripts/run_cnn_grid.py --out-dir outputs/cnn_grid --resume
+python scripts/run_fewshot.py --out-dir outputs/fewshot --resume
+python scripts/run_reduced_data.py --out-dir outputs/reduced_data --resume
+python scripts/run_cnn.py --out-dir outputs/cnn_single --resume
+```
+
+Resume the full pipeline:
+
+```bash
+python scripts/run_all.py --resume
+```
+
+Notes:
+- Resume loads `train_state.pt` from each script's output directory.
+- If you stop between save points, training resumes from the last saved state (up to 5 epochs earlier).
 
 
 

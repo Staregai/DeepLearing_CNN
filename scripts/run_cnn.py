@@ -30,8 +30,10 @@ def main() -> None:
     parser.add_argument("--label-smoothing", type=float, default=cfg_defaults.label_smoothing)
     parser.add_argument("--dropout", type=float, default=cfg_defaults.dropout)
     parser.add_argument("--seed", type=int, default=cfg_defaults.seed)
-    parser.add_argument("--patience", type=int, default=10, help="Early stopping patience")
-    parser.add_argument("--min-delta", type=float, default=1e-4, help="Minimum loss delta")
+    parser.add_argument("--patience", type=int, default=cfg_defaults.early_stopping_patience, help="Early stopping patience")
+    parser.add_argument("--min-delta", type=float, default=cfg_defaults.early_stopping_min_delta, help="Minimum loss delta")
+    parser.add_argument("--checkpoint-every", type=int, default=cfg_defaults.checkpoint_every, help="Save checkpoint every N epochs")
+    parser.add_argument("--resume", action="store_true", help="Resume from out-dir/train_state.pt if available")
     parser.add_argument("--aug-profile", type=str, default="combo")
     subset_group = parser.add_mutually_exclusive_group()
     subset_group.add_argument("--train-subset-ratio", type=float, default=None)
@@ -59,6 +61,9 @@ def main() -> None:
         label_smoothing=args.label_smoothing,
         dropout=args.dropout,
         seed=args.seed,
+        early_stopping_patience=args.patience,
+        early_stopping_min_delta=args.min_delta,
+        checkpoint_every=args.checkpoint_every,
     )
 
     ensure_dir(args.out_dir)
@@ -75,13 +80,41 @@ def main() -> None:
         optimizer = Adam(model.parameters(), lr=cfg.learning_rate, weight_decay=cfg.weight_decay)
 
     criterion = nn.CrossEntropyLoss(label_smoothing=cfg.label_smoothing)
-    early_stop = EarlyStopping(patience=args.patience, min_delta=args.min_delta, checkpoint_path=args.out_dir / "best.pt")
+    early_stop = EarlyStopping(
+        patience=cfg.early_stopping_patience,
+        min_delta=cfg.early_stopping_min_delta,
+        checkpoint_path=args.out_dir / "best.pt",
+    )
 
     best_val_acc = -1.0
     best_ckpt = args.out_dir / "best.pt"
     history = {"train": [], "val": [], "early_stopped_epoch": None}
+    state_path = args.out_dir / "train_state.pt"
+    start_epoch = 0
+    last_epoch = -1
 
-    for epoch in range(cfg.epochs):
+    if args.resume and state_path.exists():
+        state = torch.load(state_path, map_location=device)
+        model.load_state_dict(state["model_state_dict"])
+        optimizer.load_state_dict(state["optimizer_state_dict"])
+        best_val_acc = float(state.get("best_val_accuracy", -1.0))
+        history = state.get("history", history)
+        saved_next_epoch = int(state.get("epoch", -1)) + 1
+        history_next_epoch = len(history.get("train", []))
+        start_epoch = history_next_epoch if history_next_epoch > 0 else saved_next_epoch
+
+        es_state = state.get("early_stopping", {})
+        early_stop.best_loss = float(es_state.get("best_loss", early_stop.best_loss))
+        early_stop.counter = int(es_state.get("counter", early_stop.counter))
+        early_stop.stopped_epoch = int(es_state.get("stopped_epoch", early_stop.stopped_epoch))
+
+        if "torch_rng_state" in state:
+            torch.set_rng_state(state["torch_rng_state"])
+        if torch.cuda.is_available() and "cuda_rng_state_all" in state:
+            torch.cuda.set_rng_state_all(state["cuda_rng_state_all"])
+
+    for epoch in range(start_epoch, cfg.epochs):
+        last_epoch = epoch
         train_metrics = run_epoch(model, train_loader, criterion, optimizer, device, train=True)
         val_metrics = run_epoch(model, val_loader, criterion, optimizer, device, train=False)
 
@@ -97,11 +130,31 @@ def main() -> None:
             best_val_acc = val_metrics["accuracy"]
             torch.save(model.state_dict(), best_ckpt)
 
+        if cfg.checkpoint_every > 0 and (epoch + 1) % cfg.checkpoint_every == 0:
+            torch.save(model.state_dict(), args.out_dir / f"epoch_{epoch + 1}.pt")
+            torch.save(
+                {
+                    "epoch": epoch,
+                    "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "best_val_accuracy": best_val_acc,
+                    "history": history,
+                    "early_stopping": {
+                        "best_loss": early_stop.best_loss,
+                        "counter": early_stop.counter,
+                        "stopped_epoch": early_stop.stopped_epoch,
+                    },
+                    "torch_rng_state": torch.get_rng_state(),
+                    "cuda_rng_state_all": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+                },
+                state_path,
+            )
+
         stopped = early_stop(val_metrics["loss"])
         improvement = early_stop.get_improvement(val_metrics["loss"])
         print(
             f"Epoch {epoch+1}/{cfg.epochs} | Val Loss: {val_metrics['loss']:.4f} | "
-            f"Improvement: {improvement:.6f} | Patience: {early_stop.counter}/{args.patience}"
+            f"Improvement: {improvement:.6f} | Patience: {early_stop.counter}/{cfg.early_stopping_patience}"
         )
 
         if stopped:
@@ -111,6 +164,25 @@ def main() -> None:
 
     model.load_state_dict(torch.load(best_ckpt, map_location=device))
     test_metrics = run_epoch(model, test_loader, criterion, optimizer=None, device=device, train=False)
+
+    torch.save(
+        {
+            "epoch": last_epoch,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "best_val_accuracy": best_val_acc,
+            "history": history,
+            "early_stopping": {
+                "best_loss": early_stop.best_loss,
+                "counter": early_stop.counter,
+                "stopped_epoch": early_stop.stopped_epoch,
+            },
+            "torch_rng_state": torch.get_rng_state(),
+            "cuda_rng_state_all": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+            "completed": True,
+        },
+        state_path,
+    )
 
     writer.close()
 
@@ -125,8 +197,10 @@ def main() -> None:
             "dropout": cfg.dropout,
             "seed": cfg.seed,
             "aug_profile": args.aug_profile,
-            "early_stopping_patience": args.patience,
-            "early_stopping_min_delta": args.min_delta,
+            "early_stopping_patience": cfg.early_stopping_patience,
+            "early_stopping_min_delta": cfg.early_stopping_min_delta,
+            "checkpoint_every": cfg.checkpoint_every,
+            "resume": args.resume,
         },
         "best_val_accuracy": best_val_acc,
         "test_metrics": test_metrics,

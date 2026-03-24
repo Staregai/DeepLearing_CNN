@@ -24,6 +24,7 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=cfg_defaults.epochs)
     parser.add_argument("--batch-size", type=int, default=cfg_defaults.batch_size)
     parser.add_argument("--seed", type=int, default=cfg_defaults.seed)
+    parser.add_argument("--resume", action="store_true", help="Resume each run from its out-dir/train_state.pt if available")
     subset_group = parser.add_mutually_exclusive_group()
     subset_group.add_argument("--train-subset-ratio", type=float, default=None)
     subset_group.add_argument("--train-subset-size", type=int, default=None)
@@ -68,9 +69,19 @@ def main() -> None:
 
         run_name = f"aug={aug}_opt={opt}_mom={mom}_ls={ls}_drop={do}"
         out = args.out_dir / run_name.replace("/", "-")
+        resume_state = out / "train_state.pt" if args.resume else None
 
         model = BaselineCNN(num_classes=10, dropout=do)
-        result = train_supervised(model, train_loader, val_loader, test_loader, cfg, out, device)
+        result = train_supervised(
+            model,
+            train_loader,
+            val_loader,
+            test_loader,
+            cfg,
+            out,
+            device,
+            resume_state=resume_state,
+        )
         result["run_name"] = run_name
         runs.append(result)
 

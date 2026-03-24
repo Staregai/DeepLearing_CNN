@@ -19,6 +19,7 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=cfg_defaults.epochs)
     parser.add_argument("--batch-size", type=int, default=cfg_defaults.batch_size)
     parser.add_argument("--seed", type=int, default=cfg_defaults.seed)
+    parser.add_argument("--resume", action="store_true", help="Resume from out-dir/train_state.pt if available")
     subset_group = parser.add_mutually_exclusive_group()
     subset_group.add_argument("--train-subset-ratio", type=float, default=None)
     subset_group.add_argument("--train-subset-size", type=int, default=None)
@@ -47,7 +48,17 @@ def main() -> None:
     )
 
     model = build_efficientnet(num_classes=10, dropout=0.2)
-    train_supervised(model, train_loader, val_loader, test_loader, cfg, args.out_dir, device)
+    resume_state = args.out_dir / "train_state.pt" if args.resume else None
+    train_supervised(
+        model,
+        train_loader,
+        val_loader,
+        test_loader,
+        cfg,
+        args.out_dir,
+        device,
+        resume_state=resume_state,
+    )
 
 
 if __name__ == "__main__":

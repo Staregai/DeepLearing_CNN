@@ -45,6 +45,8 @@ def train_fewshot(
     cfg: FewShotConfig,
     output_dir: Path,
     device: torch.device,
+    checkpoint_every: int = 5,
+    resume_state: Path | None = None,
 ) -> dict:
     ensure_dir(output_dir)
     writer = SummaryWriter(log_dir=str(output_dir / "tb"))
@@ -54,8 +56,24 @@ def train_fewshot(
 
     best_val_acc = -1.0
     best_ckpt = output_dir / "best.pt"
+    history = {"train_loss": [], "train_acc": [], "val_loss": [], "val_acc": []}
+    start_epoch = 0
+    state_path = output_dir / "train_state.pt"
 
-    for epoch in tqdm(range(cfg.epochs), desc="Epochs", leave=True):
+    if resume_state is not None and resume_state.exists():
+        state = torch.load(resume_state, map_location=device)
+        encoder.load_state_dict(state["model_state_dict"])
+        optimizer.load_state_dict(state["optimizer_state_dict"])
+        best_val_acc = float(state.get("best_val_accuracy", -1.0))
+        history = state.get("history", history)
+        start_epoch = int(state.get("epoch", -1)) + 1
+
+        if "torch_rng_state" in state:
+            torch.set_rng_state(state["torch_rng_state"])
+        if torch.cuda.is_available() and "cuda_rng_state_all" in state:
+            torch.cuda.set_rng_state_all(state["cuda_rng_state_all"])
+
+    for epoch in tqdm(range(start_epoch, cfg.epochs), desc="Epochs", leave=True):
         encoder.train()
         train_losses = []
         train_accs = []
@@ -95,16 +113,53 @@ def train_fewshot(
         writer.add_scalar("val/loss", val_loss, epoch)
         writer.add_scalar("val/accuracy", val_acc, epoch)
 
+        history["train_loss"].append(train_loss)
+        history["train_acc"].append(train_acc)
+        history["val_loss"].append(val_loss)
+        history["val_acc"].append(val_acc)
+
         if val_acc > best_val_acc:
             best_val_acc = val_acc
             torch.save(encoder.state_dict(), best_ckpt)
 
+        if checkpoint_every > 0 and (epoch + 1) % checkpoint_every == 0:
+            torch.save(encoder.state_dict(), output_dir / f"epoch_{epoch + 1}.pt")
+            torch.save(
+                {
+                    "epoch": epoch,
+                    "model_state_dict": encoder.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "best_val_accuracy": best_val_acc,
+                    "history": history,
+                    "config": asdict(cfg),
+                    "torch_rng_state": torch.get_rng_state(),
+                    "cuda_rng_state_all": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+                },
+                state_path,
+            )
+
     writer.close()
+
+    torch.save(
+        {
+            "epoch": cfg.epochs - 1,
+            "model_state_dict": encoder.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "best_val_accuracy": best_val_acc,
+            "history": history,
+            "config": asdict(cfg),
+            "torch_rng_state": torch.get_rng_state(),
+            "cuda_rng_state_all": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+            "completed": True,
+        },
+        state_path,
+    )
 
     result = {
         "config": asdict(cfg),
         "best_val_accuracy": best_val_acc,
         "checkpoint": str(best_ckpt),
+        "state": str(state_path),
     }
     save_json(result, output_dir / "result.json")
     return result
