@@ -34,10 +34,10 @@ def main() -> None:
     device = get_device()
 
     aug_profiles = ["baseline", "color_jitter", "autoaugment", "cutout", "compression", "combo"]
-    optimizers = ["sgd", "adam"]
-    momentums = [0.7, 0.8]
-    label_smoothing_vals = [0.0, 0.2]
-    dropouts = [0.0, 0.3]
+    optimizers = "adam" #["sgd", "adam"]
+    momentums = 0.7 #[0.7, 0.8]
+    label_smoothing_vals = 0.0 #[0.0, 0.2]
+    dropouts = 0.0 #[0.0, 0.3]
 
     runs = []
 
