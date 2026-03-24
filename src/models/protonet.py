@@ -37,7 +37,7 @@ def prototypical_loss(
     n_way: int,
     n_support: int,
     n_query: int,
-) -> tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     classes = torch.unique(labels)
     if len(classes) != n_way:
         raise ValueError("Episode labels do not match n_way")
@@ -64,4 +64,4 @@ def prototypical_loss(
     loss = nn.CrossEntropyLoss()(logits, targets)
     preds = logits.argmax(dim=1)
     acc = (preds == targets).float().mean()
-    return loss, acc
+    return loss, acc, preds, targets
