@@ -46,7 +46,7 @@ def train_fewshot(
     cfg: FewShotConfig,
     output_dir: Path,
     device: torch.device,
-    checkpoint_every: int = 5,
+    checkpoint_every: int | None = None,
     resume_state: Path | None = None,
 ) -> dict:
     ensure_dir(output_dir)
@@ -54,6 +54,7 @@ def train_fewshot(
 
     encoder.to(device)
     optimizer = Adam(encoder.parameters(), lr=cfg.learning_rate)
+    effective_checkpoint_every = cfg.checkpoint_every if checkpoint_every is None else checkpoint_every
 
     best_val_acc = -1.0
     best_ckpt = output_dir / "best.pt"
@@ -158,7 +159,7 @@ def train_fewshot(
             best_val_acc = val_acc
             torch.save(encoder.state_dict(), best_ckpt)
 
-        if checkpoint_every > 0 and (epoch + 1) % checkpoint_every == 0:
+        if effective_checkpoint_every > 0 and (epoch + 1) % effective_checkpoint_every == 0:
             torch.save(encoder.state_dict(), output_dir / f"epoch_{epoch + 1}.pt")
             torch.save(
                 {

@@ -34,3 +34,4 @@ class FewShotConfig:
     epochs: int = 1000
     learning_rate: float = 1e-3
     seed: int = 42
+    checkpoint_every: int = 5

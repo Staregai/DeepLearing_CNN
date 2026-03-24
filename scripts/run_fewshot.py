@@ -22,6 +22,7 @@ def main() -> None:
     parser.add_argument("--data-dir", type=Path, default=Path("src/dataset"))
     parser.add_argument("--out-dir", type=Path, default=Path("outputs/fewshot"))
     parser.add_argument("--epochs", type=int, default=cfg_defaults.epochs)
+    parser.add_argument("--checkpoint-every", type=int, default=cfg_defaults.checkpoint_every)
     parser.add_argument("--seed", type=int, default=cfg_defaults.seed)
     parser.add_argument("--resume", action="store_true", help="Resume from out-dir/train_state.pt if available")
     subset_group = parser.add_mutually_exclusive_group()
@@ -41,7 +42,7 @@ def main() -> None:
         subset_ratio=args.train_subset_ratio,
     )
 
-    cfg = FewShotConfig(epochs=args.epochs, seed=args.seed)
+    cfg = FewShotConfig(epochs=args.epochs, seed=args.seed, checkpoint_every=args.checkpoint_every)
 
     encoder = ProtoEncoder()
     resume_state = args.out_dir / "train_state.pt" if args.resume else None
@@ -52,7 +53,7 @@ def main() -> None:
         cfg,
         args.out_dir,
         device,
-        checkpoint_every=5,
+        checkpoint_every=cfg.checkpoint_every,
         resume_state=resume_state,
     )
 
