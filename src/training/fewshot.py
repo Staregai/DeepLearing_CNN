@@ -17,6 +17,12 @@ from src.training.metrics import macro_precision_recall
 from src.utils.io import ensure_dir, save_json
 
 
+def _as_cpu_byte_tensor(state) -> torch.Tensor:
+    if isinstance(state, torch.Tensor):
+        return state.detach().to(device="cpu", dtype=torch.uint8).contiguous()
+    return torch.as_tensor(state, dtype=torch.uint8, device="cpu").contiguous()
+
+
 def _sample_episode(dataset: ImageFolder, cfg: FewShotConfig):
     labels = [label for _, label in dataset.samples]
     class_to_indices = {}
@@ -83,10 +89,14 @@ def train_fewshot(
         history.setdefault("val_recall", [])
         start_epoch = int(state.get("epoch", -1)) + 1
 
-        if "torch_rng_state" in state:
-            torch.set_rng_state(state["torch_rng_state"])
-        if torch.cuda.is_available() and "cuda_rng_state_all" in state:
-            torch.cuda.set_rng_state_all(state["cuda_rng_state_all"])
+        if "torch_rng_state" in state and state["torch_rng_state"] is not None:
+            torch.set_rng_state(_as_cpu_byte_tensor(state["torch_rng_state"]))
+        if torch.cuda.is_available() and "cuda_rng_state_all" in state and state["cuda_rng_state_all"] is not None:
+            cuda_states = state["cuda_rng_state_all"]
+            if isinstance(cuda_states, (list, tuple)):
+                torch.cuda.set_rng_state_all([_as_cpu_byte_tensor(s) for s in cuda_states])
+            else:
+                torch.cuda.set_rng_state_all([_as_cpu_byte_tensor(cuda_states)])
 
     for epoch in tqdm(range(start_epoch, cfg.epochs), desc="Epochs", leave=True):
         encoder.train()

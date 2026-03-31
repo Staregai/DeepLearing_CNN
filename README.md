@@ -1,8 +1,8 @@
 # DeepLearning_CNN
 
-End-to-end implementation of the CINIC-10 project described in the documentation:
-- CNN hyperparameter grid experiments,
-- EfficientNet transfer learning baseline,
+End-to-end CINIC-10 experimentation project with:
+- CNN baseline and grid experiments,
+- EfficientNet transfer-learning baseline,
 - Prototypical Networks (few-shot learning),
 - reduced-data robustness analysis,
 - soft-voting ensemble evaluation.
@@ -17,7 +17,8 @@ pip install -r requirements.txt
 ```
 
 3. Download and extract CINIC-10:
-	 https://www.kaggle.com/datasets/mengcius/cinic10
+
+https://www.kaggle.com/datasets/mengcius/cinic10
 
 Expected folder layout:
 
@@ -35,49 +36,69 @@ cinic10/
 		...
 ```
 
-Default dataset path used by scripts: src/dataset
-You can still override it with --data-dir /custom/path.
+Default dataset path used by scripts: `src/dataset`
+
+You can override it with:
+
+```bash
+--data-dir /custom/path
+```
+
+`src.data.cinic10` supports split aliases:
+- train/training
+- valid/val/validation
+- test/testing
 
 Optional training subset controls (all training scripts):
-- --train-subset-ratio 0.25 to use 25% of train split
-- --train-subset-size 5000 to use exactly 5000 train samples
+- `--train-subset-ratio 0.25` to use 25% of train split
+- `--train-subset-size 5000` to use exactly 5000 train samples
 
 ## 2. Project Structure
 
 ```text
+configs/                         # currently empty (reserved for config files)
+outputs/                         # training/evaluation artifacts
+scripts/                         # runnable experiment entrypoints
+	run_all.py
+	run_cnn.py
+	run_cnn_grid.py
+	run_efficientnet.py
+	run_ensemble.py
+	run_fewshot.py
+	run_reduced_data.py
 src/
+	config.py
 	data/
 		augmentations.py
 		cinic10.py
+	dataset/                       # local CINIC-10 data root (default)
 	models/
 		cnn_baseline.py
 		efficientnet.py
 		protonet.py
 		prototypical_classifier.py
 	training/
-		supervised.py
-		fewshot.py
+		early_stopping.py
 		ensemble.py
+		fewshot.py
 		metrics.py
+		supervised.py
 	utils/
-		reproducibility.py
 		device.py
 		io.py
-scripts/
-	run_cnn_grid.py
-	run_efficientnet.py
-	run_fewshot.py
-	run_cnn.py
-	run_reduced_data.py
-	run_ensemble.py
-	run_all.py
+		reproducibility.py
 ```
 
-## 3. Reproducibility
+## 3. Output Artifacts
 
-- Deterministic seed initialization is applied in each run.
-- All runs save metrics, configs, TensorBoard logs, and checkpoints.
-- Training state for resume is saved every 5 epochs as `train_state.pt`.
+Training/evaluation scripts write to `outputs/...` (or a custom path via `--out-dir` / `--out-root`).
+
+Typical training output directory contains:
+- `best.pt` - model weights with best validation metric
+- `epoch_<N>.pt` - periodic checkpoints (`checkpoint_every`, default 5)
+- `train_state.pt` - full resumable training state
+- JSON summaries such as `result.json`, `history.json`, `summary.json`, `eval_result.json` (script-dependent)
+- `tb/` - TensorBoard logs
 
 ## 4. Run Experiments
 
@@ -90,10 +111,14 @@ python scripts/run_cnn_grid.py --out-dir outputs/cnn_grid
 python scripts/run_cnn_grid.py --out-dir outputs/cnn_grid --train-subset-ratio 0.2
 ```
 
-Investigated dimensions include:
-- training hyperparameters: optimizer (SGD/Adam), momentum,
-- regularization hyperparameters: dropout, label smoothing,
-- augmentation profiles: baseline + advanced methods.
+Important: current `run_cnn_grid.py` is configured with a reduced internal grid:
+- augmentation: `autoaugment`
+- optimizer: `sgd`
+- momentum: `0.7`
+- label smoothing: `0.2`, `0.0`
+- dropout: `0.3`, `0.0`
+
+So by default it runs 4 combinations. To expand the grid, edit lists in `scripts/run_cnn_grid.py`.
 
 ### Single CNN with Early Stopping
 
@@ -119,9 +144,9 @@ python scripts/run_cnn.py \
 ```
 
 Early stopping options:
-- `--patience 10` – Stop if no improvement for 10 epochs
-- `--min-delta 1e-4` – Minimum loss decrease to count as improvement
-- `--aug-profile {baseline|color_jitter|autoaugment|cutout|compression|combo}` – Augmentation strategy
+- `--patience 10` - stop if no improvement for 10 epochs
+- `--min-delta 1e-4` - minimum loss decrease to count as improvement
+- `--aug-profile {baseline|color_jitter|autoaugment|cutout|compression|combo}` - augmentation strategy
 
 Also supports subset training:
 ```bash
@@ -131,11 +156,13 @@ python scripts/run_cnn.py --train-subset-ratio 0.3 --patience 15
 ### EfficientNet baseline
 
 ```bash
-python scripts/run_efficientnet.py --out-dir outputs/efficientnet
+python scripts/run_efficientnet.py
 
 # Example: train on exactly 10000 samples
 python scripts/run_efficientnet.py --out-dir outputs/efficientnet --train-subset-size 10000
 ```
+
+Default output directory in this script is currently `outputs/efficientnet51`.
 
 ### Few-shot Prototypical Network
 
@@ -156,11 +183,12 @@ python scripts/run_reduced_data.py --out-dir outputs/reduced_data --ratio 0.3 --
 
 ```bash
 python scripts/run_ensemble.py \
-	--cnn-ckpt outputs/cnn_grid/<best_run>/best.pt \
-	--effnet-ckpt outputs/efficientnet/best.pt \
-	--fewshot-ckpt outputs/fewshot/best.pt \
-	--out-file outputs/ensemble/result.json
+  --cnn-ckpt outputs/cnn_grid/<best_run>/best.pt \
+  --effnet-ckpt outputs/efficientnet/best.pt \
+  --fewshot-ckpt outputs/fewshot/best.pt \
+  --out-file outputs/ensemble/result.json
 ```
+
 Soft voting follows:
 
 $$
@@ -172,6 +200,13 @@ $$
 ```bash
 python scripts/run_all.py
 ```
+
+Execution order in `run_all.py`:
+1. few-shot
+2. efficientnet
+3. cnn grid
+4. reduced-data
+5. ensemble
 
 Custom output root:
 
@@ -185,14 +220,14 @@ Run full pipeline on subset of train data:
 python scripts/run_all.py --train-subset-ratio 0.3
 ```
 
-### Pause and Resume Training (every 5 epochs)
+### Pause and Resume Training
 
-Training scripts now save a resumable training state every 5 epochs. This lets you stop a run and continue later.
+Training scripts save resumable state in `train_state.pt`, with periodic checkpoints controlled by `--checkpoint-every` (where available).
 
 Saved files:
-- `best.pt`: best validation model weights.
-- `epoch_<N>.pt`: periodic model snapshots (every 5 epochs).
-- `train_state.pt`: full resume state (epoch, model, optimizer, early-stopping state, history, RNG state).
+- `best.pt`: best validation model weights
+- `epoch_<N>.pt`: periodic model snapshots
+- `train_state.pt`: full resume state (epoch, model, optimizer, history, RNG state)
 
 Resume a specific training script:
 
@@ -211,8 +246,8 @@ python scripts/run_all.py --resume
 ```
 
 Notes:
-- Resume loads `train_state.pt` from each script's output directory.
-- If you stop between save points, training resumes from the last saved state (up to 5 epochs earlier).
+- Resume loads `train_state.pt` from each script's output directory
+- If you stop between save points, training resumes from the last saved state
 
 
 
@@ -226,4 +261,4 @@ tensorboard --logdir outputs
 
 - CINIC-10 official statistics are used for normalization.
 - AutoAugment uses CIFAR10 policy as a practical approximation for CINIC-10.
-- The script scripts/run_all.py provides an orchestration template and should be adjusted to your selected best CNN checkpoint path.
+- `run_all.py` automatically reads best CNN checkpoint from `outputs/.../cnn_grid/summary.json` before running ensemble.

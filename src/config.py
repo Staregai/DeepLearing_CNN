@@ -11,7 +11,7 @@ class Paths:
 @dataclass
 class TrainConfig:
     batch_size: int = 128
-    epochs: int = 1000
+    epochs: int = 500
     learning_rate: float = 1e-3
     weight_decay: float = 0.0
     optimizer: str = "adam"
@@ -20,7 +20,7 @@ class TrainConfig:
     dropout: float = 0.0
     num_workers: int = 4
     seed: int = 42
-    early_stopping_patience: int = 30
+    early_stopping_patience: int = 40
     early_stopping_min_delta: float = 1e-5
     checkpoint_every: int = 5
 

@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.config import TrainConfig
 from src.data.cinic10 import load_cinic10_datasets, make_dataloaders, subset_training_dataset
@@ -15,10 +20,10 @@ def main() -> None:
     cfg_defaults = TrainConfig()
     parser = argparse.ArgumentParser(description="Train EfficientNet on CINIC-10")
     parser.add_argument("--data-dir", type=Path, default=Path("src/dataset"))
-    parser.add_argument("--out-dir", type=Path, default=Path("outputs/efficientnet"))
+    parser.add_argument("--out-dir", type=Path, default=Path("outputs/efficientnet51"))
     parser.add_argument("--epochs", type=int, default=cfg_defaults.epochs)
     parser.add_argument("--batch-size", type=int, default=cfg_defaults.batch_size)
-    parser.add_argument("--seed", type=int, default=cfg_defaults.seed)
+    parser.add_argument("--seed", type=int, default=51)
     parser.add_argument("--resume", action="store_true", help="Resume from out-dir/train_state.pt if available")
     subset_group = parser.add_mutually_exclusive_group()
     subset_group.add_argument("--train-subset-ratio", type=float, default=None)

@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import torch
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.config import TrainConfig
 from src.data.cinic10 import load_cinic10_datasets, make_dataloaders, subset_training_dataset
@@ -15,6 +20,12 @@ from src.utils.io import ensure_dir, save_json
 from src.utils.reproducibility import set_seed
 from torch import nn
 from torch.utils.tensorboard import SummaryWriter
+
+
+def _as_cpu_byte_tensor(state) -> torch.Tensor:
+    if isinstance(state, torch.Tensor):
+        return state.detach().to(device="cpu", dtype=torch.uint8).contiguous()
+    return torch.as_tensor(state, dtype=torch.uint8, device="cpu").contiguous()
 
 
 def main() -> None:
@@ -34,7 +45,7 @@ def main() -> None:
     parser.add_argument("--min-delta", type=float, default=cfg_defaults.early_stopping_min_delta, help="Minimum loss delta")
     parser.add_argument("--checkpoint-every", type=int, default=cfg_defaults.checkpoint_every, help="Save checkpoint every N epochs")
     parser.add_argument("--resume", action="store_true", help="Resume from out-dir/train_state.pt if available")
-    parser.add_argument("--aug-profile", type=str, default="combo")
+    parser.add_argument("--aug-profile", type=str, default="autoaugment")
     subset_group = parser.add_mutually_exclusive_group()
     subset_group.add_argument("--train-subset-ratio", type=float, default=None)
     subset_group.add_argument("--train-subset-size", type=int, default=None)
@@ -109,10 +120,14 @@ def main() -> None:
         early_stop.counter = int(es_state.get("counter", early_stop.counter))
         early_stop.stopped_epoch = int(es_state.get("stopped_epoch", early_stop.stopped_epoch))
 
-        if "torch_rng_state" in state:
-            torch.set_rng_state(state["torch_rng_state"])
-        if torch.cuda.is_available() and "cuda_rng_state_all" in state:
-            torch.cuda.set_rng_state_all(state["cuda_rng_state_all"])
+        if "torch_rng_state" in state and state["torch_rng_state"] is not None:
+            torch.set_rng_state(_as_cpu_byte_tensor(state["torch_rng_state"]))
+        if torch.cuda.is_available() and "cuda_rng_state_all" in state and state["cuda_rng_state_all"] is not None:
+            cuda_states = state["cuda_rng_state_all"]
+            if isinstance(cuda_states, (list, tuple)):
+                torch.cuda.set_rng_state_all([_as_cpu_byte_tensor(s) for s in cuda_states])
+            else:
+                torch.cuda.set_rng_state_all([_as_cpu_byte_tensor(cuda_states)])
 
     for epoch in range(start_epoch, cfg.epochs):
         last_epoch = epoch

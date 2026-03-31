@@ -4,8 +4,13 @@ import argparse
 import gc
 from itertools import product
 from pathlib import Path
+import sys
 
 import torch
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.config import TrainConfig
 from src.data.cinic10 import load_cinic10_datasets, make_dataloaders, subset_training_dataset
@@ -33,11 +38,11 @@ def main() -> None:
     set_seed(args.seed)
     device = get_device()
 
-    aug_profiles = ["baseline", "color_jitter", "autoaugment", "cutout", "compression", "combo"]
-    optimizers = ["adam"] #["sgd", "adam"]
-    momentums = [0.7] #[0.7, 0.8]
-    label_smoothing_vals = [0.0] #[0.0, 0.2]
-    dropouts = [0.0] #[0.0, 0.3]
+    aug_profiles = ["autoaugment"] #["baseline", "color_jitter", "autoaugment", "cutout", "compression", "combo"]
+    optimizers = ["sgd"] #["sgd", "adam"]
+    momentums = [0.7] #[0.7, 0.9]
+    label_smoothing_vals = [0.2, 0.0]
+    dropouts = [0.3, 0.0]
 
     runs = []
 
@@ -59,7 +64,7 @@ def main() -> None:
         cfg = TrainConfig(
             batch_size=args.batch_size,
             epochs=args.epochs,
-            learning_rate=1e-3 if opt == "adam" else 1e-2,
+            learning_rate=cfg_defaults.learning_rate,
             optimizer=opt,
             momentum=mom,
             label_smoothing=ls,
